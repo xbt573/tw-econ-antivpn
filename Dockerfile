@@ -2,6 +2,8 @@ FROM golang:alpine as build
 
 WORKDIR /app
 
+RUN apk add alpine-sdk
+
 COPY . .
 RUN go build
 
