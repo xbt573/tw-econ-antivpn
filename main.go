@@ -135,7 +135,9 @@ func main() {
 				}
 
 				if isVPN {
-					_, err := conn.Write([]byte("kick " + match[1] + " " + kickMessage))
+					_, err := conn.Write(
+						[]byte("kick " + match[1] + " " + kickMessage + "\n"),
+					)
 					if err != nil {
 						log.Fatalln(err)
 					}
