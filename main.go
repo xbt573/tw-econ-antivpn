@@ -1,155 +1,100 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
+
+	"github.com/xbt573/tw-econ-antivpn/antivpn"
+	"github.com/xbt573/tw-econ-antivpn/econ"
 )
 
 var (
 	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+) addr=(.*:\d+)`)
+
+	host        = getEnvDefault("TW_HOST", "localhost")
+	port        = intMustParse(getEnvDefault("TW_PORT", "8303"))
+	password    = getEnv("TW_PASSWORD")
+	token       = getEnv("API_TOKEN")
+	kickMessage = getEnvDefault("KICK_MESSAGE", "Kicked for VPN")
+	banMessage  = getEnvDefault("BAN_MESSAGE", "Banned for VPN")
+	banTime     = intMustParse(getEnvDefault("BAN_TIME", "60"))
+
+	console = econ.NewECON(host, password, port)
+	vpn     = antivpn.NewAntiVPN(token)
+
+	signalChannel = make(chan os.Signal, 1)
 )
 
-type VPNApiResponse struct {
-	Security struct {
-		VPN   bool `json:"vpn"`
-		Proxy bool `json:"proxy"`
-		Tor   bool `json:"tor"`
-		Relay bool `json:"relay"`
-	} `json:"security"`
-}
-
-func checkVPN(token string, ip string) (bool, error) {
-	url := "https://vpnapi.io/api/" + strings.Split(ip, ":")[0] + "?key=" + token
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return false, err
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-
-	resBody, err := io.ReadAll(res.Body)
-	if err != nil {
-		return false, err
-	}
-
-	var response VPNApiResponse
-	err = json.Unmarshal(resBody, &response)
-	if err != nil {
-		return false, err
-	}
-
-	if response.Security.VPN || response.Security.Proxy ||
-		response.Security.Tor || response.Security.Relay {
-		return true, nil
-	}
-
-	return false, nil
-}
-
-func main() {
-	host, exists := os.LookupEnv("TW_HOST")
-	if !exists {
-		log.Fatalln("TW_HOST not set")
-	}
-
-	port, exists := os.LookupEnv("TW_PORT")
-	if !exists {
-		log.Fatalln("TW_PORT not set")
-	}
-
-	password, exists := os.LookupEnv("TW_PASSWORD")
-	if !exists {
-		log.Fatalln("TW_PASSWORD not set")
-	}
-
-	token, exists := os.LookupEnv("API_TOKEN")
-	if !exists {
-		log.Fatalln("API_TOKEN not set")
-	}
-
-	kickMessage, exists := os.LookupEnv("KICK_MESSAGE")
-	if !exists {
-		kickMessage = "Kicked for VPN"
-	}
-
-	conn, err := net.Dial("tcp", host+":"+port)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer conn.Close()
-
-	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	message := string(buffer[:n])
-	if strings.Contains(message, "Enter password") {
-		_, err = conn.Write([]byte(password + "\n"))
+func mainLoop() {
+	for console.Connected {
+		message, err := console.Read()
 		if err != nil {
 			log.Fatalln(err)
 		}
 
-		buffer := make([]byte, 1024)
-		n, err := conn.Read(buffer)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		message := string(buffer[:n])
-		if !strings.Contains(message, "Authentication successful") {
-			log.Fatalln("Wrong password or timeout")
-		}
-	}
-
-	go func() {
-		for {
-			buffer := make([]byte, 1024)
-			n, err := conn.Read(buffer)
+		if strings.Contains(message, "player has entered the game") {
+			match := playerJoinedRegex.FindStringSubmatch(message)
+			checkResult, err := vpn.CheckVPN(match[2])
 			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-
 				log.Fatalln(err)
 			}
 
-			message := string(buffer[:n])
-			if strings.Contains(message, "player has entered the game") {
-				match := playerJoinedRegex.FindStringSubmatch(message)
-				isVPN, err := checkVPN(token, match[2])
+			id := intMustParse(match[1])
+
+			if checkResult.Ban {
+				err := console.Ban(id, banTime, banMessage)
 				if err != nil {
 					log.Fatalln(err)
 				}
-
-				if isVPN {
-					_, err := conn.Write(
-						[]byte("kick " + match[1] + " " + kickMessage + "\n"),
-					)
-					if err != nil {
-						log.Fatalln(err)
-					}
+			} else if checkResult.IsVPN {
+				err := console.Kick(id, kickMessage)
+				if err != nil {
+					log.Fatalln(err)
 				}
 			}
-		}
-	}()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	for range c {
+			switch {
+			case checkResult.Ban:
+				log.Printf("Banned %v\n", match[2])
+
+			case checkResult.IsVPN && checkResult.Cached:
+				log.Printf("Kicked %v (cached)\n", match[2])
+			case checkResult.IsVPN:
+				log.Printf("Kicked %v\n", match[2])
+			}
+		}
+	}
+}
+
+func init() {
+	log.SetFlags(0)
+	log.SetOutput(new(logWriter))
+
+	signal.Notify(signalChannel, os.Interrupt)
+}
+
+func main() {
+	log.Println("Starting tw-econ-antivpn...")
+
+	err := console.Connect()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	go mainLoop()
+
+	log.Println("Started! Waiting for server shutdown or interrupt...")
+
+	select {
+	case <-signalChannel:
+		break
+
+	case <-console.Completed:
 		break
 	}
+
 	log.Println("Shutting down...")
 }
