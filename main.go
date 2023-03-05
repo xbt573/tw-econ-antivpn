@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+) addr=(.*):\d+`)
+	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+).*(\d+\.\d+\.\d+\.\d+)`)
 
 	host        = getEnvDefault("TW_HOST", "localhost")
 	port        = intMustParse(getEnvDefault("TW_PORT", "8303"))
