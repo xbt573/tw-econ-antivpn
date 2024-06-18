@@ -3,6 +3,7 @@ package parse
 import (
 	"log"
 	"strconv"
+	"strings"
 )
 
 func GetIntOrFail(str string) int {
@@ -13,3 +14,8 @@ func GetIntOrFail(str string) int {
 
 	return result
 }
+
+func GetArray(str string) []string {
+	return strings.Split(str, ",")
+}
+

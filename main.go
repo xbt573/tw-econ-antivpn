@@ -23,6 +23,7 @@ var (
 	kickMessage = env.GetDefault("KICK_MESSAGE", "Kicked for VPN")
 	banMessage  = env.GetDefault("BAN_MESSAGE", "Banned for VPN")
 	banTime     = env.GetIntDefault("BAN_TIME", 60)
+	whitelist   = env.GetArrayDefault("WHITELIST", map[string]bool{})
 
 	console = econ.NewECON(host, password, port)
 	vpn     = antivpn.NewAntiVPN(token)
@@ -39,7 +40,13 @@ func mainLoop() {
 
 		if strings.Contains(message, "player has entered the game") {
 			match := playerJoinedRegex.FindStringSubmatch(message)
-			checkResult, err := vpn.CheckVPN(match[2])
+			ip := match[2]
+
+			if whitelist[ip] {
+				continue
+			}
+
+			checkResult, err := vpn.CheckVPN(ip)
 			if err != nil {
 				log.Fatalln(err)
 			}
@@ -60,12 +67,12 @@ func mainLoop() {
 
 			switch {
 			case checkResult.Ban:
-				log.Printf("Banned %v\n", match[2])
+				log.Printf("Banned %v\n", ip)
 
 			case checkResult.IsVPN && checkResult.Cached:
-				log.Printf("Kicked %v (cached)\n", match[2])
+				log.Printf("Kicked %v (cached)\n", ip)
 			case checkResult.IsVPN:
-				log.Printf("Kicked %v\n", match[2])
+				log.Printf("Kicked %v\n", ip)
 			}
 		}
 	}
