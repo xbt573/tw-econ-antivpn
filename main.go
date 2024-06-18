@@ -9,18 +9,19 @@ import (
 
 	"github.com/xbt573/tw-econ-antivpn/antivpn"
 	"github.com/xbt573/tw-econ-antivpn/econ"
+	"github.com/xbt573/tw-econ-antivpn/env"
 )
 
 var (
 	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+).*?(\d+\.\d+\.\d+\.\d+)`)
 
-	host        = getEnvDefault("TW_HOST", "localhost")
-	port        = intMustParse(getEnvDefault("TW_PORT", "8303"))
-	password    = getEnv("TW_PASSWORD")
-	token       = getEnv("API_TOKEN")
-	kickMessage = getEnvDefault("KICK_MESSAGE", "Kicked for VPN")
-	banMessage  = getEnvDefault("BAN_MESSAGE", "Banned for VPN")
-	banTime     = intMustParse(getEnvDefault("BAN_TIME", "60"))
+	host        = env.GetDefault("TW_HOST", "localhost")
+	port        = intMustParse(env.GetDefault("TW_PORT", "8303"))
+	password    = env.Get("TW_PASSWORD")
+	token       = env.Get("API_TOKEN")
+	kickMessage = env.GetDefault("KICK_MESSAGE", "Kicked for VPN")
+	banMessage  = env.GetDefault("BAN_MESSAGE", "Banned for VPN")
+	banTime     = intMustParse(env.GetDefault("BAN_TIME", "60"))
 
 	console = econ.NewECON(host, password, port)
 	vpn     = antivpn.NewAntiVPN(token)
