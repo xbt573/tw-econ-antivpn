@@ -3,6 +3,8 @@ package env
 import (
 	"log"
 	"os"
+
+	"github.com/xbt573/tw-econ-antivpn/parse"
 )
 
 func Get(name string) string {
@@ -21,4 +23,13 @@ func GetDefault(name string, defaultValue string) string {
 	}
 
 	return env
+}
+
+func GetIntDefault(name string, defaultValue int) int {
+	env, exists := os.LookupEnv(name)
+	if !exists {
+		return defaultValue
+	}
+
+	return parse.GetIntOrFail(env)
 }
