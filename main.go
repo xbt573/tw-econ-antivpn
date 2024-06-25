@@ -9,18 +9,21 @@ import (
 
 	"github.com/xbt573/tw-econ-antivpn/antivpn"
 	"github.com/xbt573/tw-econ-antivpn/econ"
+	"github.com/xbt573/tw-econ-antivpn/env"
+	"github.com/xbt573/tw-econ-antivpn/parse"
 )
 
 var (
 	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+).*?(\d+\.\d+\.\d+\.\d+)`)
 
-	host        = getEnvDefault("TW_HOST", "localhost")
-	port        = intMustParse(getEnvDefault("TW_PORT", "8303"))
-	password    = getEnv("TW_PASSWORD")
-	token       = getEnv("API_TOKEN")
-	kickMessage = getEnvDefault("KICK_MESSAGE", "Kicked for VPN")
-	banMessage  = getEnvDefault("BAN_MESSAGE", "Banned for VPN")
-	banTime     = intMustParse(getEnvDefault("BAN_TIME", "60"))
+	host        = env.GetDefault("TW_HOST", "localhost")
+	port        = env.GetIntDefault("TW_PORT", 8303)
+	password    = env.Get("TW_PASSWORD")
+	token       = env.Get("API_TOKEN")
+	kickMessage = env.GetDefault("KICK_MESSAGE", "Kicked for VPN")
+	banMessage  = env.GetDefault("BAN_MESSAGE", "Banned for VPN")
+	banTime     = env.GetIntDefault("BAN_TIME", 60)
+	whitelist   = env.GetArrayDefault("WHITELIST", map[string]bool{})
 
 	console = econ.NewECON(host, password, port)
 	vpn     = antivpn.NewAntiVPN(token)
@@ -37,12 +40,18 @@ func mainLoop() {
 
 		if strings.Contains(message, "player has entered the game") {
 			match := playerJoinedRegex.FindStringSubmatch(message)
-			checkResult, err := vpn.CheckVPN(match[2])
+			ip := match[2]
+
+			if whitelist[ip] {
+				continue
+			}
+
+			checkResult, err := vpn.CheckVPN(ip)
 			if err != nil {
 				log.Fatalln(err)
 			}
 
-			id := intMustParse(match[1])
+			id := parse.GetIntOrFail(match[1])
 
 			if checkResult.Ban {
 				err := console.Ban(id, banTime, banMessage)
@@ -58,12 +67,12 @@ func mainLoop() {
 
 			switch {
 			case checkResult.Ban:
-				log.Printf("Banned %v\n", match[2])
+				log.Printf("Banned %v\n", ip)
 
 			case checkResult.IsVPN && checkResult.Cached:
-				log.Printf("Kicked %v (cached)\n", match[2])
+				log.Printf("Kicked %v (cached)\n", ip)
 			case checkResult.IsVPN:
-				log.Printf("Kicked %v\n", match[2])
+				log.Printf("Kicked %v\n", ip)
 			}
 		}
 	}
