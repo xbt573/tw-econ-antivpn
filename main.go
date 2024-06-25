@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	playerJoinedRegex = regexp.MustCompile(`ClientID=(\d+).*?(\d+\.\d+\.\d+\.\d+)`)
+	playerJoinedRegex = regexp.MustCompile(`ClientI[Dd]=(\d+).*?(\d+\.\d+\.\d+\.\d+)`)
 
 	host        = env.GetDefault("TW_HOST", "localhost")
 	port        = env.GetIntDefault("TW_PORT", 8303)
